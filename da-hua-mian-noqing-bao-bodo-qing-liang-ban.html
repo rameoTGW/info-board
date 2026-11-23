@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:,">
+<title>大画面の情報ボード 軽量版</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background:#ffffff; color:#222222;
+    font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+    min-height:100vh; padding:26px 30px 20px;
+  }
+  button { min-height:44px; }
+  .jswarn { background:#f5f5f5; border:1px solid #555555; color:#333333; padding:16px 18px; margin-bottom:20px; font-size:19px; line-height:1.6; }
+  .jswarn b { font-size:22px; color:#222222; }
+  .jswarn ol { margin:8px 0 0; padding-left:26px; }
+  .jswarn li { margin:4px 0; }
+
+  /* ===== 2カラム（横画面）：左＝細い列、右＝広い表 ===== */
+  .board { display:flex; gap:32px; align-items:stretch; }
+  .col-left { flex:0 0 30%; display:flex; flex-direction:column; min-width:0; border-right:1px solid #dddddd; padding-right:32px; }
+  .col-right { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
+
+  /* ===== 左カラム：日付・時計・天気 ===== */
+  .datebig { font-size:42px; font-weight:900; line-height:1.15; }
+  .datesub { font-size:15px; color:#767676; margin-top:6px; }
+  .clock { font-size:88px; line-height:1.05; font-weight:900; letter-spacing:0; margin-top:10px; white-space:nowrap; overflow:hidden; }
+  .clock .sec { font-size:0.38em; color:#8a8a8a; font-weight:700; }
+  .refresh { background:none; color:#595959; border:none; border-bottom:1px solid #bbbbbb; border-radius:0; font-size:16px; padding:6px 2px; margin-top:14px; align-self:flex-start; }
+  .wcard { padding:22px 2px 6px; margin-top:26px; border-top:1px solid #dddddd; }
+  .wcard .wlabel { font-size:17px; color:#595959; font-weight:800; }
+  .wmain { display:flex; align-items:center; gap:14px; margin-top:10px; }
+  .wmain .wicon { line-height:1; flex:0 0 auto; color:#3d3d3d; }
+  .wmain .wicon svg { width:56px; height:56px; display:block; }
+  .wmain .wstate { font-size:30px; font-weight:800; }
+  .wmain .wtemp { font-size:19px; margin-top:2px; white-space:nowrap; }
+  .wmain .wtemp .hi { color:#222222; font-weight:800; }
+  .wmain .wtemp .lo { color:#222222; font-weight:800; }
+  .wpop { font-size:20px; color:#595959; margin-top:10px; font-weight:700; }
+  .wcard.tomorrow .wmain .wicon svg { width:40px; height:40px; }
+  .wcard.tomorrow .wmain .wstate { font-size:23px; }
+  .wcard.tomorrow .wmain .wtemp { font-size:17px; }
+  .wstatus { font-size:14px; color:#8a8a8a; margin-top:12px; min-height:20px; line-height:1.5; }
+
+  /* ===== 右カラム：今週の日ごと行リスト ===== */
+  h2.sec-title { font-size:23px; margin:2px 0 14px; color:#222222; font-weight:800; }
+  h2.sec-title span { color:#767676; font-size:15px; font-weight:400; margin-left:8px; }
+  .week { border-top:2px solid #222222; flex:1; display:flex; flex-direction:column; }
+  .wrow { display:flex; align-items:center; gap:18px; padding:15px 8px; border-bottom:1px solid #e3e3e3; flex:1; }
+  .wrow .dcell { flex:0 0 96px; }
+  .wrow .dnum { font-size:28px; font-weight:900; line-height:1.1; }
+  .wrow .dw { font-size:16px; color:#767676; font-weight:700; }
+  .wrow .today-tag { display:inline-block; color:#8a5a54; border:1px solid #d9a7a0; font-size:12px; font-weight:800; padding:0 7px; margin-left:6px; vertical-align:middle; }
+  .wrow .items { min-width:0; }
+  .wrow .item { font-size:21px; font-weight:700; line-height:1.4; }
+  .wrow .item + .item { margin-top:2px; }
+  .wrow .item .ic { display:inline-block; width:1.35em; text-align:center; margin-right:6px; color:#3d3d3d; vertical-align:-0.18em; }
+  .wrow .item .ic svg { width:1.15em; height:1.15em; display:inline-block; }
+  .wrow .item.plan { color:#222222; font-weight:700; }
+  .wrow .empty { color:#bdbdbd; font-weight:400; }
+  .wrow.today { background:#f7ecea; }
+  .wrow.today .dnum { text-decoration:underline; }
+  .wrow.past { opacity:.45; }
+  .week-loading { padding:16px; font-size:18px; }
+
+  .foot { font-size:13px; color:#8a8a8a; margin-top:20px; line-height:1.7; }
+  .foot a { color:#444444; }
+
+  /* ===== 縦画面・狭い画面では縦積み ===== */
+  @media (max-width:900px){
+    .board { flex-direction:column; }
+    .col-left { flex:none; border-right:none; padding-right:0; border-bottom:1px solid #dddddd; padding-bottom:18px; }
+    .clock { font-size:64px; }
+    .datebig { font-size:32px; }
+    .wrow .item { font-size:19px; }
+    .wrow { padding:13px 12px; }
+  }
+</style>
+</head>
+<body>
+  <div class="jswarn" id="jsWarn">
+    <b>この開き方では、時計と表が動きません</b><br>
+    ファイルのプレビュー表示ではプログラムが動かないため、このままでは時刻も表も表示されません。Safariで開き直してください。
+    <ol>
+      <li>この画面を閉じて、ファイルアプリでこのHTMLファイルを<b>長押し</b>します</li>
+      <li>「共有」を押して、アプリ一覧から<b>Safari</b>（なければ「ブラウザで開く」）を選びます</li>
+      <li>Safariで時計が動き始めたら成功です。そのまま共有 →「ホーム画面に追加」がおすすめです</li>
+    </ol>
+  </div>
+
+  <div class="board">
+    <!-- 左カラム：日付・特大時計・今日と明日の天気 -->
+    <div class="col-left">
+      <div class="datebig" id="datebig">読み込み中…</div>
+      <div class="datesub">藤沢市 ・ リビングボード（軽量版）</div>
+      <div class="clock"><span id="clock">--:--</span><span class="sec" id="sec"></span></div>
+      <button class="refresh" id="refreshBtn" type="button">↻ 更新</button>
+
+      <div class="wcard">
+        <div class="wlabel">今日の天気（藤沢）</div>
+        <div class="wmain">
+          <div class="wicon" id="wIconToday">…</div>
+          <div>
+            <div class="wstate" id="wStateToday">読み込み中…</div>
+            <div class="wtemp" id="wTempToday"></div>
+          </div>
+        </div>
+        <div class="wpop" id="wPopToday"></div>
+      </div>
+
+      <div class="wcard tomorrow">
+        <div class="wlabel">明日の天気</div>
+        <div class="wmain">
+          <div class="wicon" id="wIconTomorrow">…</div>
+          <div>
+            <div class="wstate" id="wStateTomorrow">読み込み中…</div>
+            <div class="wtemp" id="wTempTomorrow"></div>
+          </div>
+        </div>
+      </div>
+      <div class="wstatus" id="wstatus"></div>
+    </div>
+
+    <!-- 右カラム：今週の日ごと行（献立・ごみ・予定をまとめて表示） -->
+    <div class="col-right">
+      <h2 class="sec-title">今週の予定<span id="weekRange"></span></h2>
+      <div class="week" id="weekList"><div class="week-loading">予定を読み込み中…</div></div>
+    </div>
+  </div>
+
+  <div class="foot">天気データ: Open-Meteo（藤沢）／ ごみ日程: <a href="https://www.city.fujisawa.kanagawa.jp/kankyo-j/kurashi/gomi/shushubi/nittei/r86b.html">藤沢市 6ブロック収集日程カレンダー</a>（令和8年度）に合わせています。ごみは朝8時までに出してください（その他資源は朝7〜9時に資源集積所へ）。年末年始など臨時変更は市の案内が優先です。天気は開いたときと「更新」ボタンで取得します（約30分ごとに自動でも読み直します）。</div>
+
+<script>
+/* ============================================================
+   データ領域（ここだけ書き換えれば献立・予定が変わります）
+   キーは "年-月-日"（月・日はゼロ埋めなし）です。
+   ============================================================ */
+
+/* 今週のこんだて：奥さんのUI案 v2（手書き）の読み取り結果。
+   23日（月）ほっけ塩焼き、豚汁／24日（火）マーボー豆腐／25日（水）豚の生姜焼き
+   26日（木）ペッパーライス風／27日（金）タコライス
+   土日は未記入＝「—」表示になります。 */
+var MENU_DATA = {
+  "2026-11-23": "麻婆豆腐＋焼売",
+  "2026-11-24": "ホッケ塩焼き、豚汁",
+  "2026-11-25": "豚の生姜焼き",
+  "2026-11-26": "ペッパーライス風",
+  "2026-11-27": "タコライス"
+};
+
+/* 今週の予定：奥さんのUI案 v2（手書き）の読み取り結果。
+   23日（月）りん病院。予定が無い日は行に表示されません。 */
+var PLAN_DATA = {
+  "2026-11-23": "りん病院",
+  "2026-11-25": "パパ出社予定"
+};
+
+/* ===== 共通：JSが動いたら警告バナーを消す／更新ボタン用の受け皿 ===== */
+window.__board = {};
+(function(){
+  try{
+    var w = document.getElementById("jsWarn");
+    if(w && w.parentNode) w.parentNode.removeChild(w);
+  }catch(e){}
+})();
+
+/* ===== 共通：Asia/Tokyo の「いま」を返す（端末の時刻設定に引きずられない） ===== */
+function tokyoNow(){
+  try{
+    var s = new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
+    var d = new Date(s);
+    if(!isNaN(d.getTime())) return d;
+  }catch(e){}
+  return new Date();
+}
+function dateKey(d){
+  return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();
+}
+
+/* ===== 時計（独立ブロック：他が失敗しても時計だけは動かす） ===== */
+(function(){
+  try{
+    var WD = ["日","月","火","水","木","金","土"];
+    function pad(n){ return (n<10?"0":"")+n; }
+    /* 時計が左カラムからはみ出していたら、収まるまで少しずつ縮める（秒まで必ず表示する） */
+    function fitClock(){
+      var box = document.getElementsByClassName("clock")[0];
+      if(!box) return;
+      var base = (window.innerWidth && window.innerWidth<=900) ? 64 : 88;
+      var size = base, guard = 0;
+      box.style.fontSize = size+"px";
+      while(box.scrollWidth > box.clientWidth && size > 34 && guard < 40){
+        size -= 2;
+        box.style.fontSize = size+"px";
+        guard++;
+      }
+    }
+    function tick(){
+      var now = tokyoNow();
+      document.getElementById("clock").textContent = now.getHours()+":"+pad(now.getMinutes());
+      document.getElementById("sec").textContent = ":"+pad(now.getSeconds());
+      document.getElementById("datebig").textContent = (now.getMonth()+1)+"/"+now.getDate()+"（"+WD[now.getDay()]+")";
+      /* 数字の組み合わせで幅が変わっても見切れないよう、はみ出し時だけ縮める */
+      var box = document.getElementsByClassName("clock")[0];
+      if(box && box.scrollWidth > box.clientWidth){
+        var cur = parseInt(box.style.fontSize, 10) || 88;
+        if(cur > 34) box.style.fontSize = (cur-2)+"px";
+      }
+    }
+    tick(); fitClock(); setInterval(tick, 1000);
+    if(window.addEventListener) window.addEventListener("resize", fitClock, false);
+    setTimeout(fitClock, 600);
+    /* 万一初回描画に失敗していたら、少し遅れて再試行 */
+    setTimeout(function(){
+      var c = document.getElementById("clock");
+      if(c && (c.textContent==="--:--" || c.textContent==="")) tick();
+    }, 1500);
+    window.__board.tick = tick;
+  }catch(e){
+    document.getElementById("datebig").textContent = "時計を表示できませんでした";
+  }
+})();
+
+/* ===== 天気（独立ブロック）：Open-Meteo（藤沢 35.339, 139.491）日別＋時間別、XMLHttpRequest＝古いSafari向け ===== */
+(function(){
+  try{
+  function pad(n){ return (n<10?"0":"")+n; }
+  /* 天気アイコン：ICOOON MONO風の単色ラインアイコン（インラインSVG） */
+  var WSVG = {
+    sun: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="24" cy="24" r="8"/><path d="M24 6v5M24 37v5M6 24h5M37 24h5M11 11l3.5 3.5M33.5 33.5L37 37M37 11l-3.5 3.5M14.5 33.5L11 37"/></svg>',
+    partly: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="16" r="5.5"/><path d="M17 4v3M5 16h3M8.5 7.5l2 2M25.5 7.5l-2 2"/><path d="M20 40h16a7 7 0 0 0 .8-13.9A10 10 0 0 0 17.3 29 6.5 6.5 0 0 0 20 40z"/></svg>',
+    cloud: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 38h21a8.5 8.5 0 0 0 1-16.9A12 12 0 0 0 12.4 24 7.5 7.5 0 0 0 14 38z"/></svg>',
+    fog: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 27h20a7.5 7.5 0 0 0 .9-14.9A11 11 0 0 0 12.3 15 6.8 6.8 0 0 0 13 27z"/><path d="M10 34h28M14 41h20"/></svg>',
+    drizzle: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 29h20a7.5 7.5 0 0 0 .9-14.9A11 11 0 0 0 12.3 17 6.8 6.8 0 0 0 13 29z"/><path d="M17 35l-1.2 3M24 35l-1.2 3M31 35l-1.2 3"/></svg>',
+    rain: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 27h20a7.5 7.5 0 0 0 .9-14.9A11 11 0 0 0 12.3 15 6.8 6.8 0 0 0 13 27z"/><path d="M16 33l-1.8 6M24 33l-1.8 6M32 33l-1.8 6"/></svg>',
+    snow: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 27h20a7.5 7.5 0 0 0 .9-14.9A11 11 0 0 0 12.3 15 6.8 6.8 0 0 0 13 27z"/><path d="M17 34h.01M24 37h.01M31 34h.01M20.5 40.5h.01M27.5 40.5h.01" stroke-width="3.6"/></svg>',
+    thunder: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 27h20a7.5 7.5 0 0 0 .9-14.9A11 11 0 0 0 12.3 15 6.8 6.8 0 0 0 13 27z"/><path d="M25 30l-4 7h5l-3 6" fill="currentColor" stroke="none"/></svg>'
+  };
+  function wmo(code){
+    if(code===0) return ["sun","はれ"];
+    if(code===1) return ["sun","はれ"];
+    if(code===2) return ["partly","くもり"];
+    if(code===3) return ["cloud","くもり"];
+    if(code===45||code===48) return ["fog","霧"];
+    if(code>=51&&code<=57) return ["drizzle","小雨"];
+    if(code>=61&&code<=67) return ["rain","雨"];
+    if(code>=71&&code<=77) return ["snow","雪"];
+    if(code>=80&&code<=82) return ["rain","雨"];
+    if(code>=95) return ["thunder","雷雨"];
+    return ["partly","くもり"];
+  }
+  function setDay(prefix, code, hi, lo){
+    var w = wmo(code);
+    document.getElementById("wIcon"+prefix).innerHTML = WSVG[w[0]] || "";
+    document.getElementById("wState"+prefix).textContent = w[1];
+    var t = document.getElementById("wTemp"+prefix);
+    t.innerHTML = '最高 <span class="hi"></span> ／ 最低 <span class="lo"></span>';
+    t.getElementsByTagName("span")[0].textContent = Math.round(hi)+"℃";
+    t.getElementsByTagName("span")[1].textContent = Math.round(lo)+"℃";
+  }
+  function fail(msg){
+    document.getElementById("wstatus").textContent = msg;
+    document.getElementById("wStateToday").textContent = "取得できませんでした";
+    document.getElementById("wStateTomorrow").textContent = "取得できませんでした";
+  }
+  function loadWeather(){
+    var st = document.getElementById("wstatus");
+    st.textContent = "天気を取得中…";
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=35.339&longitude=139.491&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&hourly=precipitation_probability&timezone=Asia%2FTokyo&forecast_days=3";
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.timeout = 15000;
+    xhr.onreadystatechange = function(){
+      if(xhr.readyState!==4) return;
+      if(xhr.status!==200){ fail("天気を取得できませんでした。「更新」ボタンで再試行できます。"); return; }
+      try{
+        var data = JSON.parse(xhr.responseText);
+        var days = data.daily.time, codes = data.daily.weather_code,
+            his = data.daily.temperature_2m_max, los = data.daily.temperature_2m_min,
+            pops = data.daily.precipitation_probability_max;
+        var now = tokyoNow();
+        var todayKey = now.getFullYear()+"-"+pad(now.getMonth()+1)+"-"+pad(now.getDate());
+        var idx = -1, i;
+        for(i=0;i<days.length;i++){ if(days[i]===todayKey){ idx=i; break; } }
+        if(idx<0) idx = 0;
+        setDay("Today", codes[idx], his[idx], los[idx]);
+        if(idx+1<days.length) setDay("Tomorrow", codes[idx+1], his[idx+1], los[idx+1]);
+
+        /* 今日の降水確率：この先の時間帯の最大値（過ぎた時間は除く）。取れなければ日別の最大値 */
+        var pop = (pops && pops[idx]!=null) ? pops[idx] : null;
+        if(data.hourly && data.hourly.time && data.hourly.precipitation_probability){
+          var ht = data.hourly.time, hp = data.hourly.precipitation_probability;
+          var curKey = todayKey+"T"+pad(now.getHours())+":00";
+          var best = null;
+          for(i=0;i<ht.length;i++){
+            if(ht[i].substring(0,10)===todayKey && ht[i]>=curKey && hp[i]!=null){
+              if(best===null || hp[i]>best) best = hp[i];
+            }
+          }
+          if(best!==null) pop = best;
+        }
+        document.getElementById("wPopToday").textContent = (pop!=null) ? ("降水確率 "+pop+"%") : "";
+        st.textContent = "最終取得： "+now.getHours()+":"+pad(now.getMinutes())+"（Open-Meteo）";
+      }catch(e){
+        fail("天気の読み取りに失敗しました。「更新」ボタンで再試行できます。");
+      }
+    };
+    xhr.ontimeout = function(){ fail("天気がタイムアウトしました。「更新」ボタンで再試行できます。"); };
+    xhr.onerror = function(){ fail("天気を取得できませんでした（通信エラー）。"); };
+    xhr.send();
+  }
+  loadWeather();
+  setInterval(loadWeather, 1800000);
+  window.__board.loadWeather = loadWeather;
+  }catch(e){
+    document.getElementById("wstatus").textContent = "天気を表示できませんでした。「更新」ボタンで再試行できます。";
+  }
+})();
+
+/* ===== 週表（独立ブロック）：今週の日ごと行（献立・ごみ収集・予定をまとめて表示） ===== */
+(function(){
+  try{
+  var WD = ["日","月","火","水","木","金","土"];
+
+  /* ===== ごみ収集：藤沢市 6ブロック（令和8年度＝2026年4月〜2027年3月） =====
+     毎週：火・金＝可燃ごみ・ビン／水＝プラスチック製容器包装・廃食用油・危険ごみ等
+     隔週月曜：不燃ごみ等 と その他資源 が交互／隔週木曜：カン・なべ類 と ペットボトル が交互 */
+  var FUNEN = {"2026-4":[6,20],"2026-5":[4,18],"2026-6":[1,15,29],"2026-7":[13,27],"2026-8":[10,24],"2026-9":[7,21],"2026-10":[5,19],"2026-11":[2,16,30],"2026-12":[14,28],"2027-1":[11,25],"2027-2":[8,22],"2027-3":[8,22]};
+  var SONOTA = {"2026-4":[13,27],"2026-5":[11,25],"2026-6":[8,22],"2026-7":[6,20],"2026-8":[3,17,31],"2026-9":[14,28],"2026-10":[12,26],"2026-11":[9,23],"2026-12":[7,21],"2027-1":[4,18],"2027-2":[1,15],"2027-3":[1,15,29]};
+  var KAN = {"2026-4":[9,23],"2026-5":[7,21],"2026-6":[4,18],"2026-7":[2,16,30],"2026-8":[13,27],"2026-9":[10,24],"2026-10":[8,22],"2026-11":[5,19],"2026-12":[3,17],"2027-1":[14,28],"2027-2":[11,25],"2027-3":[11,25]};
+  var PET = {"2026-4":[2,16,30],"2026-5":[14,28],"2026-6":[11,25],"2026-7":[9,23],"2026-8":[6,20],"2026-9":[3,17],"2026-10":[1,15,29],"2026-11":[12,26],"2026-12":[10,24],"2027-1":[7,21],"2027-2":[4,18],"2027-3":[4,18]};
+  function inSet(map, d){
+    var arr = map[d.getFullYear()+"-"+(d.getMonth()+1)];
+    if(!arr) return null;
+    for(var i=0;i<arr.length;i++){ if(arr[i]===d.getDate()) return true; }
+    return false;
+  }
+  function strip(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+  function gomiFor(d){
+    // 年末年始の休止（12/31〜1/1）は収集なしとして扱う
+    var md = (d.getMonth()+1)+"-"+d.getDate();
+    if(md==="12-31" || md==="1-1") return "収集休止（年末年始）";
+    var dow = d.getDay();
+    if(dow===2 || dow===5) return "可燃ごみ ・ ビン";
+    if(dow===3) return "プラスチック製容器包装 ほか";
+    if(dow===1){
+      var f = inSet(FUNEN,d), s = inSet(SONOTA,d);
+      if(f) return "不燃ごみ ・ 商品プラスチック ・ 本、雑がみ";
+      if(s) return "その他資源";
+      if(f===false && s===false){
+        // 表の範囲外：2026-11-23（その他資源）からの週数で交互判定
+        var anchor = new Date(2026,10,23);
+        var weeks = Math.round((strip(d)-strip(anchor))/604800000);
+        return (weeks%2===0) ? "その他資源" : "不燃ごみ ・ 商品プラスチック ・ 本、雑がみ";
+      }
+      return "収集なし";
+    }
+    if(dow===4){
+      var k = inSet(KAN,d), p = inSet(PET,d);
+      if(k) return "カン ・ なべ類";
+      if(p) return "ペットボトル";
+      if(k===false && p===false){
+        var anchor2 = new Date(2026,10,26); // ペットボトル
+        var weeks2 = Math.round((strip(d)-strip(anchor2))/604800000);
+        return (weeks2%2===0) ? "ペットボトル" : "カン ・ なべ類";
+      }
+      return "収集なし";
+    }
+    return "収集なし";
+  }
+
+  function mondayOf(d){
+    var m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var shift = (m.getDay()+6)%7; // 月曜までの戻り日数
+    m.setDate(m.getDate()-shift);
+    return m;
+  }
+  function esc(s){
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  /* 行アイコン：ICOOON MONO風の単色シルエット／ライン（インラインSVG）
+     献立＝フォークとナイフ、ごみ＝ごみ箱（ペール）、予定＝カレンダー */
+  var ICON_MENU = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 2v4.6c0 .5.2.8.5.8s.5-.3.5-.8V2h1v4.6c0 .5.2.8.5.8s.5-.3.5-.8V2h1v4.9c0 1.5-.8 2.5-1.9 3v12.1h-1.7V9.9C5.4 9.4 4.6 8.4 4.6 6.9V2h1.6zM17.6 2c1.5 2.1 2.3 5 2.3 7.9 0 2-.6 3.4-1.8 4.1v7.9h-1.9V2h1.4z"/></svg>';
+  var ICON_TRASH = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.2 3.2c0-.7.5-1.2 1.2-1.2h3.2c.7 0 1.2.5 1.2 1.2V4h5.4v1.9H3.8V4h5.4V3.2zM5.9 7.4h12.2l-.9 13c-.1.9-.8 1.6-1.7 1.6H8.4c-.9 0-1.6-.7-1.7-1.6l-.8-13zM9 9.8v9.4h1.5V9.8H9zm4.5 0v9.4H15V9.8h-1.5z"/></svg>';
+  var ICON_CAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 14h3M13.5 14h3M7.5 17.2h3" stroke-width="1.6"/></svg>';
+  /* 予定のアイコンは内容によらず常にカレンダーに統一（奥さんの希望、2026-11-22） */
+  function rowClass(d, today){
+    if(dateKey(d)===dateKey(today)) return " today";
+    if(strip(d)<strip(today)) return " past";
+    return "";
+  }
+  function dateCell(d, today){
+    var tag = (dateKey(d)===dateKey(today)) ? '<span class="today-tag">今日</span>' : "";
+    return '<div class="dcell"><span class="dnum">'+d.getDate()+'</span> <span class="dw">（'+WD[d.getDay()]+'）</span>'+tag+'</div>';
+  }
+  function renderWeek(){
+    var today = tokyoNow();
+    var mon = mondayOf(today);
+    /* 表示は月〜金の5日間のみ。土・日は「次の週」の月〜金を表示する（奥さんの希望、2026-11-22） */
+    var dow = today.getDay();
+    if(dow===0 || dow===6){
+      mon.setDate(mon.getDate()+7);
+    }
+    var days = [], i, d;
+    for(i=0;i<5;i++){
+      d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+i);
+      days.push(d);
+    }
+    var fri = days[4];
+    document.getElementById("weekRange").textContent =
+      (mon.getMonth()+1)+"/"+mon.getDate()+"（月）〜"+(fri.getMonth()+1)+"/"+fri.getDate()+"（金） ・ ごみ収集は藤沢市 6ブロック";
+
+    var html = "";
+    for(i=0;i<5;i++){
+      d = days[i];
+      var key = dateKey(d), cls = rowClass(d, today);
+      var menu = MENU_DATA[key];
+      var plan = PLAN_DATA[key];
+      html += '<div class="wrow'+cls+'">'+dateCell(d, today)+
+        '<div class="items">'+
+          '<div class="item"><span class="ic">'+ICON_MENU+'</span>'+(menu ? esc(menu) : '<span class="empty">—</span>')+'</div>'+
+          '<div class="item"><span class="ic">'+ICON_TRASH+'</span>'+esc(gomiFor(d))+'</div>'+
+          (plan ? '<div class="item plan"><span class="ic">'+ICON_CAL+'</span>'+esc(plan)+'</div>' : "")+
+        '</div></div>';
+    }
+    document.getElementById("weekList").innerHTML = html;
+  }
+  renderWeek();
+  setInterval(renderWeek, 600000);
+  window.__board.renderWeek = renderWeek;
+  }catch(e){
+    document.getElementById("weekList").innerHTML = '<div class="week-loading">予定を表示できませんでした</div>';
+  }
+})();
+
+/* ===== 更新ボタン：各ブロックが登録した関数を呼ぶだけ ===== */
+(function(){
+  try{
+    document.getElementById("refreshBtn").onclick = function(){
+      var b = window.__board || {};
+      if(b.loadWeather) b.loadWeather();
+      if(b.renderWeek) b.renderWeek();
+      if(b.tick) b.tick();
+    };
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
